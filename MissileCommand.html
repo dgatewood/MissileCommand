@@ -1,0 +1,323 @@
+<html> 
+<head>
+  <style>
+   *{padding: 0; margin:0;}
+   canvas{ background: #eee; display: block; margin: 0 auto;}
+   </style>
+</head>
+<body>
+<canvas id= "myCanvas" width="800" height="600"></canvas>
+<script type="text/javascript">
+let canvas = document.getElementById("myCanvas");
+let ctx = canvas.getContext("2d");
+document.addEventListener("click",clickHandler,false);
+document.addEventListener("mousemove", getPosition, false);
+
+let stars = [];
+let bullets = [];
+let explosions = [];
+let enemies = [];
+let starCount = 125;
+let turret = new Image();
+turret.src = "turret.png";
+let fps = 60;
+let playerX= 350;
+let playerY = 550;
+let playerW = 100;
+let playerH = 50;
+let turretRot = 180;
+let mouseX = 0;
+let mouseY = 0;
+let canFire = false;
+let fireToX = 0;
+let fireToY = 0;
+let isFiring = false;
+let bulletAmount = 20;
+let bulletTimer = 20;
+let score = 0;
+
+function Explosion(x, y, frames, type)
+{
+	this.x = x;
+	this.y = y;
+	this.frames = frames;
+	this.type = type;
+	this.currentFrame = 0;
+	this.hasImploded = false;
+	this.hasImplodedAgain = false;
+	this.hasExplodedAgain = false;
+}
+
+function Enemy(initX, initY, targetX, targetY)
+{
+	this.initX = initX;
+	this.initY = initY;
+	this.currX = initX;
+	this.currY = initY;
+	this.tX = targetX;
+	this.tY = targetY;
+	let adjustedX = initX - targetX;
+	let adjustedY = initY - targetY;
+	this.rot = -1 * Math.atan2(adjustedX, adjustedY) * 180 / Math.PI + 180;
+}
+
+function Bullet(x, y, degree, color, destX, destY)
+{
+	this.x = x;
+	this.y = y;
+	this.dx = destX;
+	this.dy = destY;
+	this.deg = degree;
+	this.c = color;
+	this.distToTravel = Math.sqrt(((destX - x) * (destX - x)) + ((destY - y) * (destY - y)))
+}
+
+function Star(x, y, radius, grayScale)
+{
+	this.x = x;
+	this.y = y;
+	this.r = radius;
+	this.g = grayScale;
+}
+
+for(let i = 0; i < starCount; i++)
+{
+	let randX = Math.floor(Math.random() * 800);
+	let randY = Math.floor(Math.random() * 600);
+	let randRadius = Math.floor(Math.random() * 3) + 1;
+	let gs = Math.floor(Math.random() * 156) + 150;
+	stars.push(new Star(randX, randY, randRadius, gs));
+}
+
+function getPosition(e)
+{
+	mouseX = e.x - canvas.offsetLeft;
+	mouseY = e.y - canvas.offsetTop;
+}
+
+function clickHandler(e)
+{
+	if(canFire)
+	{
+		fireToX = e.x - canvas.offsetLeft;
+		fireToY = e.y - canvas.offsetTop;
+		isFiring = true;
+	}
+}
+
+function drawPlayer()
+{
+	let adjustedX = (playerX + playerW/2 - 15/2) - mouseX;
+	let adjustedY = (playerY + playerH/2 - 60/2) - mouseY;
+	turretRot = -1 * Math.atan2(adjustedX, adjustedY) * 180 / Math.PI + 180;
+	if(turretRot > 250) turretRot = 250;
+	if(turretRot < 110) turretRot = 110;
+	ctx.fillStyle = "rgb(0,0,0)";
+	drawImageRot(turret, playerX + playerW/2 - 15/2, playerY - 60/2, 15, 60, turretRot);
+	ctx.fillRect(playerX, playerY, playerW, playerH);
+}
+
+function drawImageRot(img, x, y, width, height, deg)
+{
+	let rad = deg * Math.PI / 180;
+	ctx.translate(x+width/2, y+height/2);
+	ctx.rotate(rad);
+	ctx.drawImage(img, width/2 * -1, height /2 * -1, width, height);
+	ctx.rotate(rad * -1);
+	ctx.translate((x+width/2) * -1, (y+height/2) * -1);
+}
+
+function drawBackground()
+{
+	ctx.fillStyle = "rgb(20,20,20)";
+	ctx.fillRect(0,0, 800, 600);
+	for(let i = 0; i < stars.length; i++)
+	{
+		ctx.fillStyle = "rgb(" + stars[i].g + "," + stars[i].g + ","  + stars[i].g + ")";
+		ctx.beginPath();
+		ctx.arc(stars[i].x, stars[i].y, stars[i].r, 0, 2*Math.PI, false);
+		ctx.fill();
+		ctx.closePath();
+	}
+}
+
+function controls()
+{
+	if(isFiring && bulletAmount >  0)
+	{
+		canFire = false;
+		isFiring = false;
+		bulletAmount--;
+		let turretX = (playerX + playerW/2) + 
+					(30 * Math.cos((turretRot + 90) * Math.PI/180));
+		let turretY = (playerY) + 
+					(30 * Math.sin((turretRot + 90) * Math.PI/180));
+		let r = Math.floor(Math.random() * 256);
+		let g = Math.floor(Math.random() * 256);
+		let b = Math.floor(Math.random() * 256);
+		let rgb = "rgb(" + r + "," + g + "," + b + ")";
+		bullets.push(new Bullet(turretX, turretY, turretRot, rgb, fireToX, fireToY));
+		playSound("turret_fire.wav");
+	}
+}
+
+function drawBullets()
+{
+	bulletTimer += 1;
+	if(bulletTimer >= 20)
+	{
+		canFire = true;
+		bulletTimer = 0;
+	}
+	for(let i = 0; i < bullets.length; i++)
+	{
+		ctx.fillStyle = bullets[i].c;
+		ctx.beginPath();
+		ctx.arc(bullets[i].x, bullets[i].y, 4, 0, 2*Math.PI,false);
+		ctx.fill();
+		ctx.closePath();
+		bullets[i].x += Math.cos((bullets[i].deg + 90) * Math.PI/180) * 15;
+		bullets[i].y += Math.sin((bullets[i].deg + 90) * Math.PI/180) * 15;
+		bullets[i].distToTravel -= 15;
+		if(bullets[i].distToTravel <= 0)
+		{
+			explosions.push(new Explosion(bullets[i].x, bullets[i].y, 20, 0));
+			playSound("turret_explosion.ogg");
+			bullets.splice(i, 1);
+		}
+		
+	}
+}
+
+function drawExplosions()
+{
+	for(let i = 0; i < explosions.length; i++)
+	{
+		for(let j = explosions[i].currentFrame; j >= 0; j--)
+		{
+			let chance = Math.floor(Math.random() * 2);
+			if(explosions[i].type == 0)
+			{
+				if(chance == 0) ctx.fillStyle = "red";
+				else ctx.fillStyle = "orange";
+			}
+			else
+			{
+				if(chance == 0) ctx.fillStyle = "blue";
+				else ctx.fillStyle = "purple";
+			}
+			ctx.beginPath();
+			ctx.arc(explosions[i].x, explosions[i].y, j * 2, 0, 2*Math.PI);
+			ctx.fill();
+			ctx.closePath();
+			for(let k = 0; k < enemies.length; k++)
+			{
+				let distX = enemies[k].currX - explosions[i].x;
+				let distY = enemies[k].currY - explosions[i].y;
+				let distance = Math.sqrt((distX*distX) + (distY*distY));
+				if(distance <= j * 2 && explosions[i].type == 0){
+					score += 10;
+					bulletAmount++;
+					enemies.splice(k, 1);
+				}
+			}
+		}
+		if(explosions[i].currentFrame < explosions[i].frames && !explosions[i].hasImploded)
+		{
+			explosions[i].currentFrame += 1;
+		}
+		else if(explosions[i].currentFrame == explosions[i].frames && !explosions[i].hasImploded)
+		{
+			explosions[i].hasImploded = true;
+		}
+		else if(!explosions[i].hasExplodedAgain && explosions[i].currentFrame > 0)
+		{
+			explosions[i].currentFrame -= 1;
+		}
+		else if(!explosions[i].hasExplodedAgain && explosions[i].currentFrame == 0)
+		{
+			explosions[i].hasExplodedAgain = true;
+		}
+		else if(explosions[i].currentFrame < explosions[i].frames/2 && !explosions[i].hasImplodedAgain)
+		{
+			explosions[i].currentFrame += 1;
+		}
+		else if(explosions[i].currentFrame == explosions[i].frames/2 && !explosions[i].hasImplodedAgain)
+		{
+			explosions[i].hasImplodedAgain =true;
+		}
+		else if(explosions[i].currentFrame > 0 && explosions[i].hasImplodedAgain)
+		{
+			explosions[i].currentFrame -= 1;
+		}
+		else if(explosions[i].currentFrame == 0)
+		{
+			explosions.splice(i, 1);
+		}
+	}
+}
+
+function playSound(source)
+{
+	let sound = new Audio();
+	sound.volume = 1.0;
+	sound.src = source;
+	sound.play();
+}	
+
+function drawEnemies()
+{
+	ctx.lineWidth = 4;
+	for(let i = 0; i < enemies.length; i++)
+	{
+		ctx.beginPath();
+		ctx.strokeStyle = "red";
+		ctx.moveTo(enemies[i].currX, enemies[i].currY);
+		ctx.lineTo(enemies[i].initX, enemies[i].initY);
+		ctx.closePath();
+		ctx.stroke();
+		enemies[i].currX += (Math.cos((enemies[i].rot + 90) * Math.PI/180)) * 2;
+		enemies[i].currY += (Math.sin((enemies[i].rot + 90) * Math.PI/180)) * 2;
+		if(enemies[i].currY >= 600)
+		{
+			explosions.push(new Explosion(enemies[i].currX, enemies[i].currY, 20, 1));
+			playSound("ground_explosion.wav");
+			enemies.splice(i,1);
+		}
+	}
+}
+
+function drawScore()
+{
+	ctx.fillStyle = "rgb(200,200,0)";
+	ctx.font = "18px Ariel";
+	ctx.fillText("Score: " + score, 700, 25);
+	ctx.fillText("Bullets: " + bulletAmount, 700, 55);
+}
+
+
+function draw()
+{
+	setTimeout(function()
+	{
+		let chance = Math.floor(Math.random() * 100);
+		if(chance == 0)
+		{
+			let iX = Math.floor(Math.random() * 800);
+			let destX = Math.floor(Math.random() * 800);
+			enemies.push(new Enemy(iX, 0, destX, 600));
+		}
+		requestAnimationFrame(draw);
+		drawBackground();
+		drawPlayer();
+		drawBullets();
+		controls();
+		drawExplosions();
+		drawEnemies();
+		drawScore();
+	}, 1000/fps);
+}
+draw();
+</script>
+</body>
+</html>
